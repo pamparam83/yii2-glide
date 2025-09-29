@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace trntv\glide\controllers;
 
 use yii\web\Controller;
@@ -11,7 +13,7 @@ use yii\web\Controller;
  */
 class GlideController extends Controller
 {
-    public function actions()
+    public function actions(): array
     {
         return [
             'index' => [

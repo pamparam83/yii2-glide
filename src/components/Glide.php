@@ -1,12 +1,14 @@
 <?php
 namespace trntv\glide\components;
 
+use League\Glide\Filesystem\FileNotFoundException;
+use League\Glide\Filesystem\FilesystemException;
 use League\Uri\Http;
-use League\Uri\QueryParser;
+
 use League\Uri\Uri;
 use Yii;
 use Intervention\Image\ImageManager;
-use League\Flysystem\Adapter\Local;
+use League\Flysystem\Local\LocalFilesystemAdapter;
 use League\Flysystem\Filesystem;
 use League\Flysystem\FilesystemInterface;
 use League\Glide\Api\Api;
@@ -54,7 +56,7 @@ class Glide extends Component
     /**
      * @var string
      */
-    public $sourcePathPrefix;
+    public string $sourcePathPrefix = '';
     /**
      * @var string
      */
@@ -62,7 +64,7 @@ class Glide extends Component
     /**
      * @var string
      */
-    public $cachePathPrefix;
+    public string $cachePathPrefix = '';
     /**
      * @var string
      */
@@ -83,7 +85,7 @@ class Glide extends Component
     /**
      * @var string
      */
-    public $baseUrl;
+    public string $baseUrl  = '';
     /**
      * @var string
      */
@@ -160,8 +162,8 @@ class Glide extends Component
      * @param  string $path Image path.
      * @param  array $params Image manipulation params.
      * @return string                Cache path.
-     * @throws \League\Glide\Filesystem\FileNotFoundException
-     * @throws \League\Glide\Filesystem\FilesystemException
+     * @throws FileNotFoundException
+     * @throws FilesystemException
      */
     public function makeImage($path, $params = [])
     {
@@ -224,7 +226,7 @@ class Glide extends Component
 
         if (!$this->$property && $this->$path) {
             $this->$property = new Filesystem(
-                new Local(Yii::getAlias($this->$path))
+                new LocalFilesystemAdapter(Yii::getAlias($this->$path))
             );
         }
         return $this->$property;
@@ -254,9 +256,7 @@ class Glide extends Component
      */
     public function getApi()
     {
-        $imageManager = new ImageManager([
-            'driver' => extension_loaded('imagick') ? 'imagick' : 'gd'
-        ]);
+        $imageManager = new ImageManager(extension_loaded('imagick') ? \Intervention\Image\Drivers\Imagick\Driver::class : \Intervention\Image\Drivers\Gd\Driver::class);
         $manipulators = [
             new Orientation(),
             new Crop(),
@@ -271,8 +271,7 @@ class Glide extends Component
             new Pixelate(),
             new Background(),
             new Border(),
-            new Watermark($this->getWatermarks(), $this->watermarksPathPrefix),
-            new Encode(),
+            new Watermark($this->getWatermarks(), $this->watermarksPathPrefix ?? ''),
         ];
 
         return new Api($imageManager, $manipulators);
@@ -312,9 +311,9 @@ class Glide extends Component
             }
             $resultUrl = $this->getUrlManager()->createAbsoluteUrl($params);
             $this->getUrlManager()->showScriptName = $showScriptName;
-            $uri = Http::createFromString($resultUrl);
+            $uri = Http::new($resultUrl);
             $path = $uri->getPath();
-            $urlParams = (array) (new QueryParser)->parse($uri->getQuery());
+            $urlParams = (array) Query::new($uri->getQuery())->parameters();
         } else {
             $path = '/index.php';
             $route = array_shift($params);
@@ -368,11 +367,11 @@ class Glide extends Component
      */
     public function signUrl($url, array $params = [])
     {
-        $uri = Uri::createFromString($url);
-        $query = \array_merge($params, (new QueryParser)->parse($uri->getQuery()));
+        $uri = Uri::new($url);
+        $query = \array_merge($params, Query::fromUri($uri)->parameters());
         $signature = $this->getHttpSignature()->generateSignature($uri->getPath(), $query);
         $query['s'] = $signature;
-        $uri = $uri->withQuery((string) Query::createFromParams($query));
+        $uri = $uri->withQuery((string) Query::fromVariable($query));
         return (string) $uri;
     }
 
